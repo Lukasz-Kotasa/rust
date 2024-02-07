@@ -27,20 +27,20 @@ impl Deklinacja for Osoba {
     fn wolacz(self: &mut Self) -> String {
         let mut ret = self.first_name.clone();
 
-        // jesli przedostatnia litera jest 'e', usuń ją (wyjątek: nie usuwaj, jeśli kończy się na 'm' lub 'j' lub 'w'
-        // NikodEm -> NikodEmie, BartlomiEj -> BartlomiEju, MaciEj -> MaciEju, ZbigniEw -> ZbigniEwie
-        if !ret.ends_with("m") && !ret.ends_with("j") && !ret.ends_with("w"){
+        // jesli przedostatnia litera jest 'e', usuń ją (wyjątek: nie usuwaj, jeśli kończy się na 'm' 'j' 'w' 'l'
+        // NikodEm -> NikodEmie, BartlomiEj -> BartlomiEju, MaciEj -> MaciEju, ZbigniEw -> ZbigniEwie, DaniEl -> DaniElu
+        if !ret.ends_with("m") && !ret.ends_with("j") && !ret.ends_with("w") && !ret.ends_with("iel"){
             // MarEk -> Marku, AntEk -> Antku, BartEk -> Bartku, FranciszEk -> Franciszku, KacpEr -> Kacprze, etc
             ret = usun_przedostatnia_e(ret);
         }
             
-        if ret.ends_with("l") {
-            // Michal
+        if ret.ends_with("l") && !ret.ends_with("iel") {
+            // Michal, Pawel ale nie Daniel
             ret.push_str("e");
         } else if ret.ends_with("r") {
             // Wiktor, Waldemar, Kacper
             ret.push_str("ze");
-        } else if ret.ends_with("n") || ret.ends_with("aw") || ret.ends_with("em")
+        } else if ret.ends_with("n") || ret.ends_with("aw") || ret.ends_with("em") || ret.ends_with("am")
               || ret.ends_with("ub") || ret.ends_with("ip") || ret.ends_with("ew") {
             // Filip, Nikodem, Szymon, Stanislaw, Wieslaw, Jakub, Jan, Zbigniew
             ret.push_str("ie");
@@ -66,12 +66,17 @@ impl Deklinacja for Osoba {
 
 
 fn main() {
+   assert_eq!(Osoba { first_name: "Adam".to_string()}.wolacz(), "Adamie".to_string());
+   assert_eq!(Osoba { first_name: "Albert".to_string()}.wolacz(), "Albercie".to_string());
    assert_eq!(Osoba { first_name: "Aleksandra".to_string()}.wolacz(), "Aleksandro".to_string());
    assert_eq!(Osoba { first_name: "Alicja".to_string()}.wolacz(), "Alicjo".to_string());
+   assert_eq!(Osoba { first_name: "Andrzej".to_string()}.wolacz(), "Andrzeju".to_string());
    assert_eq!(Osoba { first_name: "Antoni".to_string()}.wolacz(), "Antoni".to_string());
    assert_eq!(Osoba { first_name: "Antek".to_string()}.wolacz(), "Antku".to_string());
    assert_eq!(Osoba { first_name: "Bartek".to_string()}.wolacz(), "Bartku".to_string());
    assert_eq!(Osoba { first_name: "Bartlomiej".to_string()}.wolacz(), "Bartlomieju".to_string());
+   assert_eq!(Osoba { first_name: "Damian".to_string()}.wolacz(), "Damianie".to_string());
+   assert_eq!(Osoba { first_name: "Daniel".to_string()}.wolacz(), "Danielu".to_string());
    assert_eq!(Osoba { first_name: "Filip".to_string()}.wolacz(), "Filipie".to_string());
    assert_eq!(Osoba { first_name: "Franciszek".to_string()}.wolacz(), "Franciszku".to_string());
    assert_eq!(Osoba { first_name: "Grzegorz".to_string()}.wolacz(), "Grzegorzu".to_string());
