@@ -1,3 +1,4 @@
+
 struct Osoba {
     first_name: String,
 }
@@ -7,19 +8,12 @@ trait Deklinacja {
 }
 
 fn usun_przedostatnia_e(s: String) -> String {
-    let mut result = String::new();
+    let mut result = s.clone();
 
-    if let Some((index, before_last)) = s.chars().rev().enumerate().nth(1) {
-        if before_last == 'e' {
-            result.push_str(&s[..s.len() - index - 1]);
-            result.push_str(&s[s.len() - index..]);
-        } else {
-            result.push_str(&s);
-        }
-    } else {
-        result.push_str(&s);
-    }
-
+    match result.chars().rev().enumerate().nth(1).unwrap().1 {
+        'e' => result.remove(s.len() - 2),
+        _ => ' ',
+    };
     result
 }
 
@@ -63,12 +57,6 @@ impl Deklinacja for Osoba {
         ret
     }
 }
-
-
-fn main() {
-   println!("All tests passed!");
-}
-
 
 #[cfg(test)]
 mod tests {
