@@ -1,3 +1,29 @@
-test
-test
-bla
+{
+  "access_points": [
+  {
+    "ssid": "MyAP",
+    "snr": 61,
+    "channel": 1
+  },
+  {
+    "ssid": "YourAP",
+    "snr": 72,
+    "channel": 2
+  },
+  {
+    "ssid": "HisAP",
+    "snr": 83,
+    "channel": 3
+  },
+  {
+    "ssid": "HerAP",
+    "snr": 94,
+    "channel": 4
+  }
+  ]
+}
+
+
+
+
+
