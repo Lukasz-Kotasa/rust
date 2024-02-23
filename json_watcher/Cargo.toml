@@ -11,5 +11,6 @@ log = "0.4.17"
 env_logger = "0.10.0"
 futures = "0.3"
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+serde = { version = "1.0", features = ["derive"] }
 hash_map_diff = "0.2.0"
 unix-named-pipe = "0.2.0"
