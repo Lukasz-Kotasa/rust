@@ -8,11 +8,13 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
+use notify::Event;
 
 //from lib.rs
 use json_watcher::PIPE_PATH;
 use json_watcher::{State, Field, Message};
-use notify::Event;
+
 
 extern crate unix_named_pipe;
 extern crate ctrlc;
@@ -75,6 +77,7 @@ fn json_to_hasmap(path: PathBuf) -> HashMap<String, AP> {
 }
 
 fn send_to_pipe(message: &Message) {
+    thread::sleep(Duration::from_millis(50));
     let mut pipe = unix_named_pipe::open_write(PIPE_PATH).expect("could not open pipe for writing");
     let serialized_msg =  serde_json::to_string(&message).unwrap_or_else(|error| panic!("Could not serialize Message, error: {:?}", error));
     pipe.write(serialized_msg.as_bytes()).expect("could not write payload to pipe");
@@ -104,7 +107,7 @@ fn find_changes(old: &HashMap<String, AP>, new: &HashMap<String, AP>) {
                                   field: Some(Field::Channel),
                                   from: Some(0),
                                   to: Some(ap.channel)});
-            log::info!("Added ssid: {}, anr: {}, ch: {}", ssid, ap.snr, ap.channel);
+            log::info!("Added ssid: {}, snr: {}, ch: {}", ssid, ap.snr, ap.channel);
         } else {
             // existing one
             let old_snr = old_ap.unwrap().1.snr;
