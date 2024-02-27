@@ -39,14 +39,22 @@ fn main() {
         .expect("Argument 1 needs to be a path");
 
     // Create new named pipe
-    let mode = 0o644;
-    let _res = unix_named_pipe::create(PIPE_PATH, Some(mode)); 
+    let mode: u32 = 0o644;
+    let res: Result<(), std::io::Error> = unix_named_pipe::create(PIPE_PATH, Some(mode)); 
+    if res.is_err() {
+        log::error!("Could not create named pipe: {}", res.err().unwrap());
+        return;
+    }
 
     if let Err(error) = watch(path) {
             log::error!("Error: {error:?}");
     }
 
-    let _ = fs::remove_file(PIPE_PATH);
+    let res: Result<(), std::io::Error> = fs::remove_file(PIPE_PATH);
+    if res.is_err() {
+        log::error!("Could not remove named pipe: {}", res.err().unwrap());
+        return;
+    }
 }
 
 fn json_to_hasmap(path: PathBuf) -> HashMap<String, AP> {
@@ -78,17 +86,17 @@ fn json_to_hasmap(path: PathBuf) -> HashMap<String, AP> {
 
 fn send_to_pipe(message: &Message) {
     thread::sleep(Duration::from_millis(50));
-    let mut pipe = unix_named_pipe::open_write(PIPE_PATH).expect("could not open pipe for writing");
-    let serialized_msg =  serde_json::to_string(&message).unwrap_or_else(|error| panic!("Could not serialize Message, error: {:?}", error));
+    let mut pipe: fs::File = unix_named_pipe::open_write(PIPE_PATH).expect("could not open pipe for writing");
+    let serialized_msg: String =  serde_json::to_string(&message).unwrap_or_else(|error| panic!("Could not serialize Message, error: {:?}", error));
+    println!("sending: {}", serialized_msg);
     pipe.write(serialized_msg.as_bytes()).expect("could not write payload to pipe");
 }
 
 fn find_changes(old: &HashMap<String, AP>, new: &HashMap<String, AP>) {
-    let received_diff = hash_map_diff(&old, &new);
+    let received_diff: hash_map_diff::HashMapDiff<&String, &AP> = hash_map_diff(&old, &new);
 
     let removed: HashMap<&String, &AP> = received_diff.removed;
     let updated: HashMap<&String, &AP> = received_diff.updated;
-
 
     for (ssid, ap) in updated {
         let old_ap = old.get_key_value(ssid);
