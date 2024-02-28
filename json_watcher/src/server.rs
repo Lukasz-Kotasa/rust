@@ -22,6 +22,8 @@ extern crate ctrlc;
 #[derive(Eq)]
 #[derive(PartialEq)]
 #[derive(Clone)]
+#[derive(Debug)]
+#[derive(Hash)]
 struct AP {
     snr: u64,
     channel: u64,
@@ -57,11 +59,8 @@ fn main() {
     }
 }
 
-fn json_to_hasmap(path: PathBuf) -> HashMap<String, AP> {
-    let json = {
-        let file_content = fs::read_to_string(path.display().to_string().clone()).expect("Error reading json file");
-        serde_json::from_str::<Value>(&file_content)
-    };
+fn json_to_hasmap(file_content: String) -> HashMap<String, AP> {
+    let json = serde_json::from_str::<Value>(&file_content);
     let mut ap_hash = HashMap::new();
     
     if json.is_ok() {
@@ -88,7 +87,6 @@ fn send_to_pipe(message: &Message) {
     thread::sleep(Duration::from_millis(50));
     let mut pipe: fs::File = unix_named_pipe::open_write(PIPE_PATH).expect("could not open pipe for writing");
     let serialized_msg: String =  serde_json::to_string(&message).unwrap_or_else(|error| panic!("Could not serialize Message, error: {:?}", error));
-    println!("sending: {}", serialized_msg);
     pipe.write(serialized_msg.as_bytes()).expect("could not write payload to pipe");
 }
 
@@ -159,7 +157,7 @@ fn make_loop_flag() -> Arc<AtomicBool> {
     })
     .expect("could not set up keyboard interrupt handler");
 
-    return running;
+    running
 }
 
 
@@ -173,7 +171,8 @@ fn watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
 
     watcher.watch(&dir, RecursiveMode::Recursive)?;
 
-    let mut old_hash: HashMap<String, AP> = json_to_hasmap(full_path.clone());
+    let json_string = fs::read_to_string(full_path.clone()).expect("Error reading json file");
+    let mut old_hash: HashMap<String, AP> = json_to_hasmap(json_string);
 
     let handle = thread::spawn(move || {
         log::info!("monitoring thread started");
@@ -184,7 +183,8 @@ fn watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
                         log::info!("monitoring thread shutting down");
                         break;
                     }  else if event.paths[0] == full_path && event.kind == EventKind::Access(AccessKind::Close(AccessMode::Write)){
-                        let new_hash: HashMap<String, AP> = json_to_hasmap(full_path.clone());
+                        let json_string = fs::read_to_string(full_path.clone()).expect("Error reading json file");
+                        let new_hash: HashMap<String, AP> = json_to_hasmap(json_string);
                         find_changes(&old_hash, &new_hash);
                         old_hash = new_hash;
                     };
@@ -204,4 +204,25 @@ fn watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
     log::info!("main thread joined after monitoring thread finished");
 
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::json_to_hasmap;
+    use crate::AP;
+    use std::collections::HashMap;
+    #[test]
+    fn converting_json_with_one_ap_to_hasmap() {
+        assert_eq!(json_to_hasmap(r#"{ "access_points": [{ "ssid": "MyAP", "snr": 61, "channel": 1 }]}"#.to_string()),
+                    HashMap::from([("MyAP".to_string(), AP::new(61,1))]));
+    }
+    #[test]
+    fn converting_json_with_three_aps_to_hasmap() {
+        assert_eq!(json_to_hasmap(r#"{"access_points": [ { "ssid": "MyAP", "snr": 1, "channel": 2 }, { "ssid": "YourAP", "snr": 3, "channel": 4 }, { "ssid": "HisAP", "snr": 5, "channel": 6}]}"#.to_string()),
+        HashMap::from([("MyAP".to_string(), AP::new(1,2)),
+                       ("YourAP".to_string(), AP::new(3,4)),
+                       ("HisAP".to_string(), AP::new(5,6)),
+        ]));
+    }
 }
