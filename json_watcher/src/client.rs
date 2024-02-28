@@ -35,7 +35,7 @@ fn main() {
                     payload_str.push(payload[i] as char);
                 }
                 let message = parse_json_from_server(&payload_str);
-                println!("{}", message);
+                log::info!("{}", message);
             }
         }
     }
