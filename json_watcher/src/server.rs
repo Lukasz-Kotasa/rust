@@ -4,6 +4,7 @@ use notify::event::{AccessKind, AccessMode};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::{env, fs, thread};
+use std::io;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,6 +32,30 @@ struct AP {
 
 impl AP {
     pub fn new(snr: u64, channel: u64) -> Self { AP {snr,channel,} }
+}
+
+#[derive(Debug)]
+struct ServerError {
+    kind: String,
+    message: String,
+}
+
+impl From<io::Error> for ServerError {
+    fn from(error: io::Error) -> Self {
+        ServerError {
+            kind: String::from("io"),
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<serde_json::Error> for ServerError {
+    fn from(error: serde_json::Error) -> Self {
+        ServerError {
+            kind: String::from("serdes"),
+            message: error.to_string(),
+        }
+    }
 }
 
 fn main() {
@@ -83,11 +108,29 @@ fn json_to_hasmap(file_content: String) -> HashMap<String, AP> {
     ap_hash
 }
 
-fn send_to_pipe(message: &Message) {
+fn send_to_pipe(message: &Message) -> Result<(), ServerError> {
+    // give some time to the client to read previous data from the pipe
     thread::sleep(Duration::from_millis(50));
-    let mut pipe: fs::File = unix_named_pipe::open_write(PIPE_PATH).expect("could not open pipe for writing");
-    let serialized_msg: String =  serde_json::to_string(&message).unwrap_or_else(|error| panic!("Could not serialize Message, error: {:?}", error));
-    pipe.write(serialized_msg.as_bytes()).expect("could not write payload to pipe");
+
+    let pipe_res  = unix_named_pipe::open_write(PIPE_PATH);
+    let mut pipe = match pipe_res {
+        Ok(file) => file,
+        Err(error) => return Err(error.into()),
+    };
+
+    let serialized_msg_res = serde_json::to_string(&message);
+    let serialized_msg = match serialized_msg_res {
+        Ok(msg) => msg,
+        Err(error) => return Err(error.into()),
+    };
+
+    let write_res = pipe.write(serialized_msg.as_bytes());
+    match write_res {
+        Ok(size) => log::info!("succ wrote {} bytes to a pipe", size),
+        Err(error) => return Err(error.into()),
+    };
+
+    Ok(())
 }
 
 fn find_changes(old: &HashMap<String, AP>, new: &HashMap<String, AP>) {
@@ -101,14 +144,14 @@ fn find_changes(old: &HashMap<String, AP>, new: &HashMap<String, AP>) {
         // check if this modified AP is existing or new one
         if old_ap.is_none() {
             // new one
-            send_to_pipe(&Message{state: State::Added,
+            let _ = send_to_pipe(&Message{state: State::Added,
                                   ssid: ssid.clone(),
                                   field: Some(Field::Snr),
                                   from: Some(0),
                                   to: Some(ap.snr)});
             
 
-            send_to_pipe(&Message{state: State::Added,
+            let _ = send_to_pipe(&Message{state: State::Added,
                                   ssid: ssid.clone(),
                                   field: Some(Field::Channel),
                                   from: Some(0),
@@ -118,7 +161,7 @@ fn find_changes(old: &HashMap<String, AP>, new: &HashMap<String, AP>) {
             // existing one
             let old_snr = old_ap.unwrap().1.snr;
             if old_snr != ap.snr {
-                send_to_pipe(&Message{state: State::Changed,
+                let _ = send_to_pipe(&Message{state: State::Changed,
                                       ssid: ssid.clone(),
                                       field: Some(Field::Snr),
                                       from: Some(old_snr),
@@ -127,7 +170,7 @@ fn find_changes(old: &HashMap<String, AP>, new: &HashMap<String, AP>) {
             }
             let old_channel = old_ap.unwrap().1.channel;
             if old_channel != ap.channel {
-                send_to_pipe(&Message{state: State::Changed,
+                let _ = send_to_pipe(&Message{state: State::Changed,
                                       ssid: ssid.clone(),
                                       field: Some(Field::Channel),
                                       from: Some(old_channel),
@@ -138,7 +181,7 @@ fn find_changes(old: &HashMap<String, AP>, new: &HashMap<String, AP>) {
     }
 
     for (ssid, _ap) in removed {
-        send_to_pipe(&Message{state: State::Removed,
+        let _ = send_to_pipe(&Message{state: State::Removed,
                               ssid: ssid.clone(),
                               field: None,
                               from: None,
@@ -171,7 +214,11 @@ fn watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
 
     watcher.watch(&dir, RecursiveMode::Recursive)?;
 
-    let json_string = fs::read_to_string(full_path.clone()).expect("Error reading json file");
+    let json_string_res = fs::read_to_string(full_path.clone()); //.expect("Error reading json file");
+    let json_string = match json_string_res {
+        Ok(str) => str,
+        Err(error) => return Err(error.into()),
+    };
     let mut old_hash: HashMap<String, AP> = json_to_hasmap(json_string);
 
     let handle = thread::spawn(move || {
@@ -210,7 +257,10 @@ fn watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::json_to_hasmap;
+    use crate::send_to_pipe;
     use crate::AP;
+    use crate::State;
+    use crate::Message;
     use std::collections::HashMap;
     #[test]
     fn converting_json_with_one_ap_to_hasmap() {
@@ -225,4 +275,14 @@ mod tests {
                        ("HisAP".to_string(), AP::new(5,6)),
         ]));
     }
+
+    #[test]
+    fn send_to_pipe_fails_with_no_pipe_created() {
+        assert!(send_to_pipe(&Message{state: State::Removed,
+            ssid: "SSID".to_string(),
+            field: None,
+            from: None,
+            to: None}).is_err_and(|e| e.kind == "io"));
+    }
+
 }
